@@ -1,0 +1,51 @@
+name: Daily Report
+
+on:
+  schedule:
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate report
+        id: report
+        run: |
+          curl -s -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/users/vai3-0719/repos?sort=pushed&per_page=10" > repos.json
+          
+          echo "## vai3-0719 Daily Repository Report" > report.md
+          echo "" >> report.md
+          echo "Generated: $(date -u)" >> report.md
+          echo "" >> report.md
+          echo "| Repository | Description | Language | Stars | Updated |" >> report.md
+          echo "|------------|-------------|----------|-------|---------|" >> report.md
+          
+          for row in $(echo 'repos.json' | jq -r '.[] | @base64'); do
+            name=$(echo "$row" | base64 -d | jq -r '.name')
+            desc=$(echo "$row" | base64 -d | jq -r '.description // " "')
+            lang=$(echo "$row" | base64 -d | jq -r '.language // " "')
+            stars=$(echo "$row" | base64 -d | jq -r '.stargazers_count')
+            updated=$(echo "$row" | base64 -d | jq -r '.pushed_at')
+            echo "| $name | $desc | $lang | $stars | $updated |" >> report.md
+          done
+          
+          echo "" >> report.md
+          echo "---" >> report.md
+          echo "This is an automated daily report from GitHub Actions." >> report.md
+          
+          cat report.md
+
+      - name: Send mail
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_SERVER || 'smtp.gmail.com' }}
+          server_port: ${{ secrets.MAIL_PORT || '587' }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: vai3-0719 Daily Report - $(date -u '+%Y-%m-%d')
+          to: 72012@qq.com
+          from: ${{ secrets.MAIL_FROM || 'vai3-0719@github.com' }}
+          html_body: file://report.md
